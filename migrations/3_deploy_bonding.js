@@ -1,20 +1,14 @@
 /* global artifacts */
-const OceanRegistry = artifacts.require('OceanRegistry.sol')
-const OceanToken = artifacts.require('OceanToken.sol')
-const OceanMarket = artifacts.require('OceanMarket.sol')
-const { saveDefinition } = require('./helper')
+const BondingCurve = artifacts.require('BondingCurve.sol')
+const Token = artifacts.require('Token.sol')
 
-const deployOceanMarket = async (deployer, network) => {
-    const tokenAddress = OceanToken.address
-    const tcrAddress = OceanRegistry.address
+const deployBondingCurve = async (deployer, network) => {
+    const tokenAddress = Token.address
 
     await deployer.deploy(
-        OceanMarket,
-        tokenAddress,
-        tcrAddress
+        BondingCurve,
+        tokenAddress
     )
-
-    saveDefinition(network, OceanMarket)
 }
 
-module.exports = deployOceanMarket
+module.exports = deployBondingCurve

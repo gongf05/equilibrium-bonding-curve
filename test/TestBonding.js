@@ -1,147 +1,103 @@
-const Bounties = artifacts.require("Bounties.sol");
+const BondingCurve = artifacts.require("BondingCurve.sol");
 const Token = artifacts.require("Token.sol");
 
 const utils = require('./Utils');
 
 
-contract('Bounties', function(accounts) {
+contract('BondingCurve', function(accounts) {
 
 
-  it("[TOKENS] Verifies that the Bounties registry works", async () => {
-    let registry = await Bounties.deployed();
-    let owner = await registry.owner();
+  it("Verifies that the bounding curve works", async () => {
+    let bonding = await BondingCurve.deployed();
+    let token = await Token.deployed();
 
-    assert(owner == accounts[0])
+    // owner accounts[0] send tokens to other users for purchase
+    const bal = await token.balanceOf.call(accounts[0])
+    console.log(`owner has balance := ${bal.valueOf()} now`)
+    await token.transfer(accounts[1], 2000, { from: accounts[0] })
+    const bal1 = await token.balanceOf.call(accounts[1])
+    console.log(`user 1 has balance := ${bal1.valueOf()} now`)
+    await token.transfer(accounts[2], 2000, { from: accounts[0] })
+    const bal2 = await token.balanceOf.call(accounts[2])
+    console.log(`user 2 has balance := ${bal2.valueOf()} now`)
+    await token.transfer(accounts[3], 2000, { from: accounts[0] })
+    const bal3 = await token.balanceOf.call(accounts[3])
+    console.log(`user 3 has balance := ${bal3.valueOf()} now`)
+
+    console.log(`-------------------------`)
+    // first user buy 50 bonded tokens
+    let price = await bonding.queryNextPrice({ from: accounts[1] })
+    console.log(`user 1 get next purchase price := ${price.valueOf()} now`)
+    // first approve bonding contract to withdraw money
+    await token.approve(bonding.address, 2000, { from: accounts[1] })
+    // buy 50 bonded tokens
+    await bonding.buyTokens(50, 2, { from: accounts[1] })
+    console.log(`user 1 bought 50 bonded tokens with price =  ${price.valueOf()} and target price = 2`)
+    // current balance
+    let ntoken = await bonding.getTokenBalance({ from: accounts[1] })
+    console.log(`user 1 has token balance = ${ntoken.valueOf()}`)
+
+    console.log(`-------------------------`)
+
+    let supply = await bonding.getTokenSupply({ from: accounts[2] })
+    console.log(`user 2 want to buy, current supply := ${supply.valueOf()} now`)
+
+    // second user buy 50 bonded tokens
+    price = await bonding.queryNextPrice({ from: accounts[2] })
+    console.log(`user 2 get next purchase price := ${price.valueOf()} now`)
+    // second approve bonding contract to withdraw money
+    await token.approve(bonding.address, 2000, { from: accounts[2] })
+    // buy 50 bonded tokens
+    await bonding.buyTokens(50, 3, { from: accounts[2] })
+    console.log(`user 2 bought 50 bonded tokens with price =  ${price.valueOf()} and target price = 3`)
+    // current balance
+    ntoken = await bonding.getTokenBalance({ from: accounts[2] })
+    console.log(`user 2 has boneded token balance = ${ntoken.valueOf()}`)
+
+    console.log(`-------------------------`)
+
+    supply = await bonding.getTokenSupply({ from: accounts[3] })
+    console.log(`user 3 want to buy, current supply := ${supply.valueOf()} now`)
+
+
+    // third user to buy from the second user
+    price = await bonding.queryNextPrice({ from: accounts[3] })
+    console.log(`user 3 get next purchase price := ${price.valueOf()} now`)
+    // second approve bonding contract to withdraw money
+    await token.approve(bonding.address, 2000, { from: accounts[3] })
+    // buy 50 bonded tokens
+    await bonding.buyTokens(50, 5, { from: accounts[3] })
+    console.log(`user 3 bought 50 bonded tokens with price =  ${price.valueOf()} and target price = 5`)
+    // current balance
+    ntoken = await bonding.getTokenBalance({ from: accounts[3] })
+    console.log(`user 3 has bonded token balance = ${ntoken.valueOf()}`)
+
+    ntoken = await bonding.getTokenBalance({ from: accounts[2] })
+    console.log(`user 2 has bonded token balance = ${ntoken.valueOf()}`)
+
+    console.log(`-------------------------`)
+
+    let bb = await token.balanceOf.call(bonding.address)
+    console.log(`BondingCurve contract has reserved token balance := ${bb.valueOf()} now`)
+
+
+    bb = await token.balanceOf.call(accounts[2])
+    console.log(`user 2 has reserved token balance := ${bb.valueOf()} now`)
+
+    bb = await token.balanceOf.call(accounts[3])
+    console.log(`user 3 has reserved token balance := ${bb.valueOf()} now`)
+
+    console.log(`-------------------------`)
+    console.log(`user 3 decides to liquidate his 50 bonded tokens`)
+    // user 3 sell his bonded tokens
+    await bonding.sellTokens(50, { from: accounts[3] })
+    bb = await token.balanceOf.call(bonding.address)
+    console.log(`BondingCurve contract has reserved token balance := ${bb.valueOf()} now`)
+
+    bb = await token.balanceOf.call(accounts[3])
+    console.log(`user 3 has reserved token balance := ${bb.valueOf()} now`)
+
 
   });
-
-
-  it("[TOKENS] Verifies that I can issue a new bounty paying in Tokens", async () => {
-    let registry = await Bounties.deployed();
-    let bountyToken = await Token.deployed();
-    let bountyId = 0;
-
-    await registry.issueBounty(0xF633f5bAf5954eE8F357055FE5151DDc27EEfdBF,
-                                2528821098,
-                                "data",
-                                1000,
-                                0x0,
-                                true,
-                                bountyToken.address,{from: accounts[0]});
-
-  });
-
-  it("[TOKENS] verifies that a date before the present will cause a failing construction", async () => {
-    let registry = await Bounties.deployed();
-    let bountyToken = await Token.deployed();
-
-    try {
-      let bountyId = 1;
-      await registry.issueBounty(0xF633f5bAf5954eE8F357055FE5151DDc27EEfdBF,
-                                  0,
-                                  "data",
-                                  1000,
-                                  0x0,
-                                  true,
-                                  bountyToken.address,{from: accounts[0]});
-    } catch (error){
-      return utils.ensureException(error);
-    }
-    assert(false, "did not error as was expected");
-
-  });
-
-  it("[TOKENS] verifies that a payout of 0 will fail", async () => {
-    let registry = await Bounties.deployed();
-    let bountyToken = await Token.deployed()
-
-    try {
-      let bountyId = 2;
-      await registry.issueBounty(accounts[0],
-                                  2528821098,
-                                  "data",
-                                  0,
-                                  0x0,
-                                  true,
-                                  bountyToken.address,{from: accounts[0]});
-    } catch (error){
-      return utils.ensureException(error);
-    }
-    assert(false, "did not error as was expected");
-
-  });
-
-
-  it("[TOKENS] verifies that simple bounty contribution and activation functions", async () => {
-    let registry = await Bounties.deployed();
-    let bountyToken = await Token.deployed();
-    // add bounty contract to be whitelisted
-    await bountyToken.setWhiteList(registry.address, true);
-
-    const registerEvent = registry.BountyIssued()
-    let bountyId = 0
-    registerEvent.watch((error, result) => {
-        if (!error) {
-            bountyId = result.args.bountyId
-        }
-    })
-
-
-    await registry.issueBounty(accounts[0],
-                                2528821098,
-                                "data",
-                                1000,
-                                0x0,
-                                true,
-                                bountyToken.address,
-                                {from: accounts[0]});
-    await bountyToken.approve(registry.address, 1000, {from: accounts[0]});
-    await registry.contribute(bountyId,1000, {from: accounts[0]});
-    let bounty = await registry.getBounty(bountyId);
-    assert(bounty[4] == 0);
-    await registry.activateBounty(bountyId,0, {from: accounts[0]});
-    bounty = await registry.getBounty(bountyId);
-    assert(bounty[4] == 1);
-    registerEvent.stopWatching()
-  });
-
-  it("[TOKENS] verifies that basic fulfillment acceptance flow works", async () => {
-    let registry = await Bounties.deployed();
-    let bountyToken = await Token.deployed()
-    // add bounty contract to be whitelisted
-    await bountyToken.setWhiteList(registry.address, true);
-
-    const registerEvent = registry.BountyIssued()
-    let bountyId = 0
-    registerEvent.watch((error, result) => {
-        if (!error) {
-            bountyId = result.args.bountyId
-        }
-    })
-
-
-    await registry.issueBounty(accounts[0],
-                                2528821098,
-                                "data",
-                                1000,
-                                0x0,
-                                true,
-                                bountyToken.address,
-                                {from: accounts[0]});
-    await bountyToken.approve(registry.address, 1000, {from: accounts[0]});
-    await registry.activateBounty(bountyId,1000, {from: accounts[0]});
-
-    await registry.fulfillBounty(bountyId, "data", {from: accounts[1]});
-
-    let fulfillment = await registry.getFulfillment(bountyId,0);
-    assert(fulfillment[0] === false);
-    await registry.acceptFulfillment(bountyId,0,{from: accounts[0]});
-    fulfillment = await registry.getFulfillment(bountyId,0);
-    assert(fulfillment[0] === true);
-    registerEvent.stopWatching()
-  });
-
-
-
 
 });

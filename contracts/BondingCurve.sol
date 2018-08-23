@@ -17,7 +17,7 @@ contract BondingCurve {
   // mapping address to associated holder struct
   mapping (address => Holder) public mHolders;
   // the holder array used to find highest target sell price
-  Holder[] public arrayHolders;
+  address[] public arrayHolders;
 
   // latest sold price
   uint256 public  curSoldPrice;
@@ -42,16 +42,14 @@ contract BondingCurve {
       // initial available supply of bonded token
       supply = 100;
       // inital price for bonded token
-      initPrice = 10;
+      initPrice = 1;
   }
-
 
   function buyTokens(uint256 _ntoken, uint256 _target) public returns (bool) {
     // first check whether the holder exist, if not, create holder struct
     if (mHolders[msg.sender].holder == address(0)){
         mHolders[msg.sender] = Holder(msg.sender, 0, 0);
-        // push into holders arrayHolders
-        arrayHolders.push(mHolders[msg.sender]);
+        arrayHolders.push(msg.sender);
     }
 
     // if supply is available, buy bonded token upto available balance with fixed price
@@ -60,9 +58,9 @@ contract BondingCurve {
       // make payment
       require(mToken.transferFrom(msg.sender, address(this), amount.mul(initPrice)));
       // update balance
-      mHolders[msg.sender].ntoken.add(amount);
+      mHolders[msg.sender].ntoken = mHolders[msg.sender].ntoken.add(amount);
       // update supply
-      supply.sub(amount);
+      supply = supply.sub(amount);
       // update target price
       mHolders[msg.sender].target = _target;
     }
@@ -73,17 +71,17 @@ contract BondingCurve {
     // we will improve this to buy more in the next available sellers in the future
     if(supply == 0){
       // find next seller
-      (Holder memory next, uint256 idx) = findNextHolder();
+      address seller = findNextHolder();
       // calculate amount of tokens to buy
-      uint256 num =  (_ntoken > next.ntoken) ? next.ntoken : _ntoken;
+      uint256 num =  (_ntoken > mHolders[seller].ntoken) ? mHolders[seller].ntoken : _ntoken;
       // calculate cost
-      uint256 cost = num.mul(arrayHolders[idx].target);
+      uint256 cost = num.mul(mHolders[seller].target);
       // make payment
-      require(mToken.transferFrom(msg.sender, arrayHolders[idx].holder, cost));
+      require(mToken.transferFrom(msg.sender, mHolders[seller].holder, cost));
       // update seller balance
-      arrayHolders[idx].ntoken.sub(num);
+      mHolders[seller].ntoken = mHolders[seller].ntoken.sub(num);
       // update buyer balance
-      mHolders[msg.sender].ntoken.add(num);
+      mHolders[msg.sender].ntoken = mHolders[msg.sender].ntoken.add(num);
       // there is no change in total supply
       mHolders[msg.sender].target = _target;
     }
@@ -100,9 +98,9 @@ contract BondingCurve {
     // transfer reserved token to holder
     require(mToken.transfer(msg.sender, payout));
     // decrease the balance of bonded token for seller
-    mHolders[msg.sender].ntoken.sub(amount);
+    mHolders[msg.sender].ntoken = mHolders[msg.sender].ntoken.sub(amount);
     // update supply
-    supply.add(amount);
+    supply = supply.add(amount);
     return true;
   }
 
@@ -118,9 +116,13 @@ contract BondingCurve {
     if(supply > 0){
       return initPrice;
     } else if (supply == 0){
-      (Holder memory next, ) = findNextHolder();
-      return next.target;
+      return mHolders[findNextHolder()].target;
     }
+  }
+
+
+  function getTokenSupply() public view returns (uint256) {
+    return supply;
   }
 
   // query balance of bonded token
@@ -128,19 +130,20 @@ contract BondingCurve {
     return mHolders[msg.sender].ntoken;
   }
 
-  function findNextHolder() internal view returns(Holder, uint) {
+  function findNextHolder() internal view returns(address) {
     uint256 maximal = 0;
     for(uint256 i; i < arrayHolders.length; i++){
         // skip holders with zero token balance
-        if(arrayHolders[i].ntoken == 0){
+        if(mHolders[arrayHolders[i]].ntoken == 0){
           continue;
         }
         // find the holder with highest target sell price
-        if(arrayHolders[i].target > arrayHolders[maximal].target){
+        if(mHolders[arrayHolders[i]].target > mHolders[arrayHolders[maximal]].target){
             maximal = i;
         }
     }
-    return (arrayHolders[maximal], maximal);
+
+    return mHolders[arrayHolders[maximal]].holder;
   }
 
 }
